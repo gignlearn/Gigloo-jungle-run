@@ -2,265 +2,301 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <title>Adorable Tiger Cub Runner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ball Runner Game</title>
     <style>
         body {
             margin: 0;
             padding: 0;
-            background-color: #228B22; /* jungle green */
-            overflow: hidden;
-            touch-action: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
         }
         canvas {
-            display: block;
-            background: linear-gradient(to bottom, #87CEEB, #90EE90); /* sky to grass feel */
+            border: 2px solid #333;
+            background-color: #87CEEB; /* Sky blue background */
         }
-        #scoreInfo {
+        #gameOver {
             position: absolute;
-            top: 10px;
-            left: 10px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
             color: white;
-            font-size: 20px;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px black;
-            pointer-events: none;
-            z-index: 10;
+            padding: 20px;
+            text-align: center;
+            display: none;
+            border-radius: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <div id="gameOver">
+        <h2>Game Over!</h2>
+        <p>Final Score: <span id="finalScore">0</span></p>
+        <button onclick="restartGame()">Restart</button>
+    </div>
 
-<div id="scoreInfo">Score: 0 | High: 0</div>
+    <script>
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameOverDiv = document.getElementById('gameOver');
+        const finalScoreSpan = document.getElementById('finalScore');
 
-<canvas id="gameCanvas"></canvas>
+        // Images (preloaded)
+        const ballImg = new Image();
+        ballImg.src = 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgIAAapb_22j2KMQk-0k46WezOcR5RCgv2b6C2q4yEgCi-XYXs2Zrx4LjhBo9ci9g2NbVxNWFZRehIA8kBxyRuD7wA6GBui8U_w5MomtEzL6b2K4o9mmNt7tXie1qn5r4eSFlDYxREEGw3Z2pNqgCm_FHErOFAAQAZ-yCaATAb4nt517Or6lvvINQ-mSCtd/s1920/1000377997.png';
 
-<script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const scoreDisplay = document.getElementById('scoreInfo');
+        const hurdleImg = new Image();
+        hurdleImg.src = 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiS_OoD7ll2j41n4L4SRxKBTrp_a5BBrRAn-SSjeq32kMQ17hCdEi1pM7Hmgv4rTuIviiuNt6k4aaw14HW9_pE79DAjXxMc7-_UXlPojDdve9zYdHlxFoiCxp3_WdgN55cbb6Fdhn4fXcxGrKKPX98zwmkYT1oXNY_L1HJM0XjJ8VrS66ynBESIyPwdcxdZ/s1536/1000376632.png';
 
-// Responsive resize
-function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight * 0.9; // leave space for score
-}
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
+        let gameRunning = false;
+        let score = 0;
+        let gameSpeed = 2; // Initial speed
 
-let isGameOver = false;
-let score = 0;
-let highScore = localStorage.getItem('tigerHigh') || 0;
-scoreDisplay.textContent = `Score: ${Math.floor(score)} | High: ${highScore}`;
+        // Player (ball)
+        const player = {
+            x: 100,
+            y: 300, // Ground level
+            width: 50,
+            height: 50,
+            vy: 0,
+            gravity: 0.8,
+            jumpPower: -15,
+            grounded: true
+        };
 
-const gravity = 0.7;
-const jumpPower = -15;
-const groundY = canvas.height - 100;
+        // Obstacles (hurdles)
+        let obstacles = [];
 
-const player = {
-    x: 100,
-    y: groundY - 80,
-    width: 80,
-    height: 80,
-    vy: 0,
-    isJumping: false
-};
-
-let obstacles = [];
-let coins = [];
-let speed = 6;
-let frame = 0;
-
-// Load images
-const tigerImg = new Image();
-tigerImg.src = 'https://thumbs.dreamstime.com/b/playful-tiger-cub-running-jungle-cute-animated-wearing-orange-shirt-brown-shorts-captured-mid-run-lush-setting-425694863.jpg'; // cute running tiger cub
-
-const cactusImg = new Image();
-cactusImg.src = 'https://www.shutterstock.com/image-vector/cartoon-game-objects-2d-art-260nw-653469973.jpg'; // simple cactus style obstacle (adjust if needed)
-
-function updateScore() {
-    scoreDisplay.textContent = `Score: ${Math.floor(score)} | High: ${highScore}`;
-}
-
-// Draw background (simple jungle feel)
-function drawBackground() {
-    // Ground
-    ctx.fillStyle = '#556B2F';
-    ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
-    
-    // Simple trees (parallax)
-    ctx.fillStyle = '#006400';
-    for (let i = 0; i < 5; i++) {
-        let tx = (frame * 1.5 + i * 200) % (canvas.width + 200) - 100;
-        ctx.fillRect(tx, groundY - 120, 30, 120);
-        ctx.fillStyle = '#228B22';
-        ctx.beginPath();
-        ctx.arc(tx + 15, groundY - 140, 50, 0, Math.PI * 2);
-        ctx.fill();
-    }
-}
-
-// Draw player with image
-function drawPlayer() {
-    if (tigerImg.complete) {
-        ctx.drawImage(tigerImg, player.x, player.y, player.width, player.height);
-    } else {
-        // Fallback simple tiger
-        ctx.fillStyle = '#FFA500';
-        ctx.fillRect(player.x, player.y, player.width, player.height);
-    }
-}
-
-// Draw cactus obstacle
-function drawObstacle(obs) {
-    if (cactusImg.complete) {
-        ctx.drawImage(cactusImg, obs.x, obs.y, obs.width, obs.height);
-    } else {
-        // Fallback brown rect
-        ctx.fillStyle = '#8B4513';
-        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-    }
-}
-
-// Draw coin
-function drawCoin(coin) {
-    ctx.fillStyle = '#FFD700';
-    ctx.beginPath();
-    ctx.arc(coin.x + 15, coin.y + 15, 15, 0, Math.PI * 2);
-    ctx.fill();
-}
-
-// Generate obstacles & coins
-function generateStuff() {
-    if (frame % 90 === 0) {
-        obstacles.push({
-            x: canvas.width,
-            y: groundY - 60,
-            width: 60,
-            height: 80
-        });
-    }
-    if (frame % 120 === 0) {
-        coins.push({
-            x: canvas.width,
-            y: Math.random() * (groundY - 200) + 50,
-            radius: 15
-        });
-    }
-}
-
-function update() {
-    if (isGameOver) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawBackground();
-
-    // Player physics
-    player.vy += gravity;
-    player.y += player.vy;
-    if (player.y >= groundY - player.height) {
-        player.y = groundY - player.height;
-        player.vy = 0;
-        player.isJumping = false;
-    }
-    drawPlayer();
-
-    generateStuff();
-
-    // Move & draw obstacles
-    obstacles.forEach((obs, i) => {
-        obs.x -= speed;
-        drawObstacle(obs);
-        if (obs.x + obs.width < 0) obstacles.splice(i, 1);
-
-        // Collision
-        if (player.x + player.width > obs.x &&
-            player.x < obs.x + obs.width &&
-            player.y + player.height > obs.y &&
-            player.y < obs.y + obs.height) {
-            isGameOver = true;
-            if (score > highScore) {
-                highScore = score;
-                localStorage.setItem('tigerHigh', highScore);
+        // Audio Context for sounds
+        let audioCtx;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             }
-            updateScore();
         }
-    });
 
-    // Move & draw coins
-    coins.forEach((coin, i) => {
-        coin.x -= speed;
-        drawCoin(coin);
-        if (coin.x + coin.radius * 2 < 0) coins.splice(i, 1);
-
-        // Collect
-        if (player.x + player.width > coin.x &&
-            player.x < coin.x + coin.radius * 2 &&
-            player.y + player.height > coin.y &&
-            player.y < coin.y + coin.radius * 2) {
-            score += 10;
-            coins.splice(i, 1);
-            updateScore();
+        function playSound(frequency, duration, type = 'sine') {
+            initAudio();
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.frequency.value = frequency;
+            oscillator.type = type;
+            gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + duration);
         }
-    });
 
-    score += 0.1;
-    updateScore();
-
-    if (isGameOver) {
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#FF4444';
-        ctx.font = 'bold 60px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Game Over!', canvas.width/2, canvas.height/2 - 40);
-        ctx.font = '30px Arial';
-        ctx.fillText('Tap screen or press R to Restart', canvas.width/2, canvas.height/2 + 20);
-    }
-
-    frame++;
-    requestAnimationFrame(update);
-}
-
-// Keyboard controls
-document.addEventListener('keydown', e => {
-    if (e.key === ' ' || e.key === 'ArrowUp') {
-        if (!player.isJumping && !isGameOver) {
-            player.vy = jumpPower;
-            player.isJumping = true;
+        // Jump sound (boing)
+        function playJumpSound() {
+            playSound(440, 0.2, 'sine'); // Higher pitch for jump
         }
-    }
-    if ((e.key === 'r' || e.key === 'R') && isGameOver) {
-        resetGame();
-    }
-});
 
-// Touch controls (mobile)
-canvas.addEventListener('touchstart', e => {
-    e.preventDefault();
-    if (isGameOver) {
-        resetGame();
-    } else if (!player.isJumping) {
-        player.vy = jumpPower;
-        player.isJumping = true;
-    }
-});
+        // Game over sound (buzz)
+        function playGameOverSound() {
+            playSound(200, 0.5, 'sawtooth'); // Low buzz
+        }
 
-function resetGame() {
-    isGameOver = false;
-    score = 0;
-    obstacles = [];
-    coins = [];
-    player.y = groundY - player.height;
-    player.vy = 0;
-    frame = 0;
-    updateScore();
-    update();
-}
+        // Score milestone sound (ding)
+        function playScoreSound() {
+            playSound(800, 0.1, 'triangle'); // Celebratory ding
+        }
 
-update(); // Start game
-</script>
+        // Background hum (subtle, starts on game start)
+        function playBackgroundHum() {
+            initAudio();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.frequency.value = 110; // Low hum
+            oscillator.type = 'sine';
+            gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime); // Very quiet
+            oscillator.start();
+            // Note: This loops indefinitely until game over
+            return oscillator;
+        }
+        let backgroundOscillator = null;
+
+        // Event listeners
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && player.grounded && gameRunning) {
+                player.vy = player.jumpPower;
+                player.grounded = false;
+                playJumpSound();
+            }
+        });
+
+        canvas.addEventListener('click', () => {
+            if (player.grounded && gameRunning) {
+                player.vy = player.jumpPower;
+                player.grounded = false;
+                playJumpSound();
+            } else if (!gameRunning) {
+                startGame();
+            }
+        });
+
+        // Game functions
+        function startGame() {
+            gameRunning = true;
+            score = 0;
+            gameSpeed = 2;
+            player.y = 300;
+            player.vy = 0;
+            player.grounded = true;
+            obstacles = [];
+            gameOverDiv.style.display = 'none';
+            if (backgroundOscillator) {
+                backgroundOscillator.stop();
+            }
+            backgroundOscillator = playBackgroundHum();
+            gameLoop();
+        }
+
+        function restartGame() {
+            startGame();
+        }
+
+        function updatePlayer() {
+            player.vy += player.gravity;
+            player.y += player.vy;
+
+            if (player.y >= 300) {
+                player.y = 300;
+                player.vy = 0;
+                player.grounded = true;
+            }
+        }
+
+        function updateObstacles() {
+            // Spawn new obstacle randomly
+            if (Math.random() < 0.02) { // Adjust spawn rate
+                obstacles.push({
+                    x: canvas.width,
+                    y: 300,
+                    width: 50,
+                    height: 80
+                });
+            }
+
+            // Move obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].x -= gameSpeed;
+                if (obstacles[i].x + obstacles[i].width < 0) {
+                    obstacles.splice(i, 1);
+                    score += 1; // Score per obstacle passed
+                    if (score % 10 === 0) {
+                        playScoreSound();
+                        gameSpeed += 0.5; // Speed up every 10 points
+                    }
+                }
+            }
+        }
+
+        function checkCollision() {
+            for (let obs of obstacles) {
+                if (player.x < obs.x + obs.width &&
+                    player.x + player.width > obs.x &&
+                    player.y < obs.y + obs.height &&
+                    player.y + player.height > obs.y) {
+                    gameOver();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            playGameOverSound();
+            if (backgroundOscillator) {
+                backgroundOscillator.stop();
+                backgroundOscillator = null;
+            }
+            finalScoreSpan.textContent = score;
+            gameOverDiv.style.display = 'block';
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw ground
+            ctx.fillStyle = '#228B22';
+            ctx.fillRect(0, 340, canvas.width, 60);
+
+            // Draw player (ball)
+            if (ballImg.complete) {
+                ctx.drawImage(ballImg, player.x, player.y, player.width, player.height);
+            } else {
+                ctx.fillStyle = 'red'; // Fallback circle
+                ctx.beginPath();
+                ctx.arc(player.x + 25, player.y + 25, 25, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Draw obstacles (hurdles)
+            for (let obs of obstacles) {
+                if (hurdleImg.complete) {
+                    ctx.drawImage(hurdleImg, obs.x, obs.y, obs.width, obs.height);
+                } else {
+                    ctx.fillStyle = 'brown'; // Fallback rectangle
+                    ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                }
+            }
+
+            // Draw score
+            ctx.fillStyle = 'black';
+            ctx.font = '24px Arial';
+            ctx.fillText(`Score: ${score}`, 10, 30);
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            updatePlayer();
+            updateObstacles();
+            if (!checkCollision()) {
+                draw();
+                requestAnimationFrame(gameLoop);
+            } else {
+                draw(); // Final draw before game over
+            }
+        }
+
+        // Preload images and start if needed
+        let imagesLoaded = 0;
+        const totalImages = 2;
+        function imageLoaded() {
+            imagesLoaded++;
+            if (imagesLoaded === totalImages) {
+                // Images ready, but game starts on user input
+            }
+        }
+        ballImg.onload = imageLoaded;
+        hurdleImg.onload = imageLoaded;
+        ballImg.onerror = () => console.error('Failed to load ball image');
+        hurdleImg.onerror = () => console.error('Failed to load hurdle image');
+
+        // Initial draw (static)
+        draw();
+    </script>
 </body>
 </html>
