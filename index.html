@@ -1,400 +1,203 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>Ball Coin Runner - Easy Kids Game</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            overflow: hidden;
-            background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 100%);
-            font-family: 'Arial Black', Arial, sans-serif;
-            touch-action: manipulation;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            user-select: none;
-        }
-        canvas {
-            display: block;
-            width: 100vw;
-            height: 100vh;
-            max-width: 100%;
-            max-height: 100%;
-            touch-action: none;
-        }
-        #ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 100;
-            pointer-events: none;
-        }
-        .ui-text {
-            color: #FFF;
-            font-size: clamp(24px, 6vw, 40px);
-            font-weight: bold;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            margin-bottom: 5px;
-        }
-        #startOverlay, #gameOver {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 150, 255, 0.85);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 200;
-            cursor: pointer;
-            touch-action: manipulation;
-        }
-        #startBtn, #restartBtn {
-            padding: clamp(20px, 8vw, 40px) clamp(40px, 15vw, 80px);
-            font-size: clamp(28px, 8vw, 48px);
-            background: linear-gradient(45deg, #FFD700, #FFA500);
-            border: none;
-            border-radius: 30px;
-            color: #333;
-            font-weight: bold;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-            margin: 20px;
-            min-height: 80px;
-            touch-action: manipulation;
-        }
-        #startBtn:active, #restartBtn:active {
-            transform: scale(0.95);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.4);
-        }
-        .overlay-text {
-            color: #FFF;
-            font-size: clamp(20px, 5vw, 32px);
-            text-align: center;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            max-width: 90%;
-            margin: 10px;
-        }
-        #instructions {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            text-align: center;
-            color: #FFF;
-            font-size: clamp(16px, 4vw, 24px);
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-            pointer-events: none;
-            z-index: 100;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Ball Coin Collector</title>
+
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+    overflow:hidden;
+    background:linear-gradient(180deg,#87CEEB,#E0F6FF);
+    font-family:Arial Black, Arial, sans-serif;
+}
+canvas {
+    display:block;
+    width:100vw;
+    height:100vh;
+}
+#ui {
+    position:absolute;
+    top:20px;
+    left:20px;
+    color:#fff;
+    font-size:clamp(24px,6vw,40px);
+    text-shadow:2px 2px 4px rgba(0,0,0,0.8);
+}
+#startOverlay {
+    position:absolute;
+    inset:0;
+    background:rgba(0,150,255,0.85);
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    z-index:10;
+}
+#startBtn {
+    padding:30px 70px;
+    font-size:40px;
+    background:linear-gradient(45deg,#FFD700,#FFA500);
+    border:none;
+    border-radius:30px;
+    font-weight:bold;
+}
+</style>
 </head>
+
 <body>
-    <canvas id="gameCanvas"></canvas>
-    <div id="ui">
-        <div class="ui-text" id="scoreText">Score: 0</div>
-        <div class="ui-text" id="levelText">Level: 1</div>
-    </div>
-    <div id="instructions">👆 Tap anywhere or SPACE to Jump! 💰 Collect Coins • Avoid Hurdles</div>
+<canvas id="gameCanvas"></canvas>
 
-    <div id="startOverlay">
-        <div id="startBtn">🚀 START GAME! 🚀</div>
-        <div class="overlay-text">Very Easy for Kids • Lots of Coins • Few Hurdles</div>
-    </div>
+<div id="ui">
+    <div id="scoreText">Score: 0</div>
+    <div id="levelText">Level: 1</div>
+</div>
 
-    <div id="gameOver">
-        <h2 class="overlay-text" style="font-size: clamp(32px, 10vw, 64px);">Game Over! 😢</h2>
-        <div class="overlay-text">Final Score: <span id="finalScore">0</span></div>
-        <div class="overlay-text">Level: <span id="finalLevel">1</span></div>
-        <div id="restartBtn">🔄 Play Again!</div>
-    </div>
+<div id="startOverlay">
+    <div id="startBtn">START GAME</div>
+</div>
 
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 
-        let gameWidth = 800;
-        let gameHeight = 600;
-        let scale = 1;
+let W = 800, H = 600;
+canvas.width = W;
+canvas.height = H;
 
-        function resizeCanvas() {
-            const vw = window.innerWidth;
-            const vh = window.innerHeight;
-            const targetW = Math.min(vw, gameWidth);
-            const targetH = Math.min(vh, gameHeight);
-            scale = Math.min(targetW / gameWidth, targetH / gameHeight);
-            canvas.width = gameWidth * scale * devicePixelRatio;
-            canvas.height = gameHeight * scale * devicePixelRatio;
-            canvas.style.width = (gameWidth * scale) + 'px';
-            canvas.style.height = (gameHeight * scale) + 'px';
-            ctx.scale(scale * devicePixelRatio, scale * devicePixelRatio);
-            ctx.imageSmoothingEnabled = false;
-        }
-        window.addEventListener('resize', resizeCanvas);
-        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 300));
-        resizeCanvas();
+const groundY = 520;
+const playerGroundY = groundY - 70;
 
-        const groundY = 520;
-        const playerGroundY = groundY - 70;
+let gameRunning = false;
+let score = 0;
+let level = 1;
+let speed = 1.2;
 
-        let gameRunning = false;
-        let score = 0;
-        let level = 1;
-        let gameSpeed = 1.2;
+const player = {
+    x:140, y:playerGroundY,
+    w:60, h:60,
+    vy:0,
+    gravity:0.5,
+    jump:-22,
+    grounded:true
+};
 
-        const player = {
-            x: 140,
-            y: playerGroundY,
-            width: 60,
-            height: 60,
-            vy: 0,
-            gravity: 0.5,
-            jumpPower: -22,
-            grounded: true
-        };
+let coins = [];
 
-        let hurdles = [];
-        let coins = [];
+const ballImg = new Image();
+ballImg.src = "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgIAAapb_22j2KMQk-0k46WezOcR5RCgv2b6C2q4yEgCi-XYXs2Zrx4LjhBo9ci9g2NbVxNWFZRehIA8kBxyRuD7wA6GBui8U_w5MomtEzL6b2K4o9mmNt7tXie1qn5r4eSFlDYxREEGw3Z2pNqgCm_FHErOFAAQAZ-yCaATAb4nt517Or6lvvINQ-mSCtd/s1920/1000377997.png";
 
-        const scoreText = document.getElementById('scoreText');
-        const levelText = document.getElementById('levelText');
-        const finalScore = document.getElementById('finalScore');
-        const finalLevel = document.getElementById('finalLevel');
-        const startOverlay = document.getElementById('startOverlay');
-        const gameOver = document.getElementById('gameOver');
+const coinImg = new Image();
+coinImg.src = "https://e7.pngegg.com/pngimages/1012/478/png-clipart-pixel-art-drawing-graphics-2d-coin-sprite-text-photography.png";
 
-        const ballImg = new Image(); ballImg.src = 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgIAAapb_22j2KMQk-0k46WezOcR5RCgv2b6C2q4yEgCi-XYXs2Zrx4LjhBo9ci9g2NbVxNWFZRehIA8kBxyRuD7wA6GBui8U_w5MomtEzL6b2K4o9mmNt7tXie1qn5r4eSFlDYxREEGw3Z2pNqgCm_FHErOFAAQAZ-yCaATAb4nt517Or6lvvINQ-mSCtd/s1920/1000377997.png';
-        const hurdleImg = new Image(); hurdleImg.src = 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiS_OoD7ll2j41n4L4SRxKBTrp_a5BBrRAn-SSjeq32kMQ17hCdEi1pM7Hmgv4rTuIviiuNt6k4aaw14HW9_pE79DAjXxMc7-_UXlPojDdve9zYdHlxFoiCxp3_WdgN55cbb6Fdhn4fXcxGrKKPX98zwmkYT1oXNY_L1HJM0XjJ8VrS66ynBESIyPwdcxdZ/s1536/1000376632.png';
-        const coinImg = new Image(); coinImg.src = 'https://e7.pngegg.com/pngimages/1012/478/png-clipart-pixel-art-drawing-graphics-2d-coin-sprite-text-photography.png';
+function jump() {
+    if (!gameRunning) startGame();
+    else if (player.grounded) {
+        player.vy = player.jump;
+        player.grounded = false;
+    }
+}
 
-        let audioCtx;
-        function initAudio() {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-        }
+canvas.addEventListener("click", jump);
+document.addEventListener("keydown", e => {
+    if (e.code === "Space") jump();
+});
 
-        function playSound(freq, dur, type = 'sine') {
-            initAudio();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.frequency.value = freq; osc.type = type;
-            gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
-            osc.start(); osc.stop(audioCtx.currentTime + dur);
-        }
+document.getElementById("startBtn").onclick = startGame;
 
-        const playJump     = () => playSound(520, 0.3, 'sine');
-        const playCollect  = () => playSound(760, 0.2, 'sine');
-        const playLevelUp  = () => { playSound(620, 0.25); setTimeout(() => playSound(830, 0.25), 120); };
-        const playGameOver = () => playSound(180, 0.8, 'sawtooth');
+function startGame() {
+    gameRunning = true;
+    score = 0;
+    level = 1;
+    speed = 1.2;
+    coins = [];
+    player.y = playerGroundY;
+    player.vy = 0;
+    player.grounded = true;
+    document.getElementById("startOverlay").style.display = "none";
+    loop();
+}
 
-        let bgOsc = null;
-        function playBGM() {
-            initAudio();
-            bgOsc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            bgOsc.connect(gain); gain.connect(audioCtx.destination);
-            bgOsc.frequency.value = 110; bgOsc.type = 'sine';
-            gain.gain.value = 0.02;
-            bgOsc.start();
-        }
+function updatePlayer() {
+    player.vy += player.gravity;
+    player.y += player.vy;
+    if (player.y >= playerGroundY) {
+        player.y = playerGroundY;
+        player.vy = 0;
+        player.grounded = true;
+    }
+}
 
-        function handleInput() {
-            if (!gameRunning) {
-                if (startOverlay.style.display !== 'none') startGame();
-                else restartGame();
-            } else if (player.grounded) {
-                player.vy = player.jumpPower;
-                player.grounded = false;
-                playJump();
-            }
-        }
-
-        canvas.addEventListener('touchstart', e => { e.preventDefault(); handleInput(); }, { passive: false });
-        canvas.addEventListener('click', handleInput);
-        document.addEventListener('keydown', e => {
-            if (e.code === 'Space') { e.preventDefault(); handleInput(); }
+function updateCoins() {
+    if (Math.random() < 0.03) {
+        coins.push({
+            x:W + 40,
+            y:180 + Math.random()*220,
+            s:40,
+            r:0
         });
+    }
 
-        function startGame() {
-            gameRunning = true;
-            score = 0; level = 1; gameSpeed = 1.2;
-            player.y = playerGroundY; player.vy = 0; player.grounded = true;
-            hurdles = []; coins = [];
-            startOverlay.style.display = 'none';
-            gameOver.style.display = 'none';
-            scoreText.textContent = 'Score: 0';
-            levelText.textContent = 'Level: 1';
-            if (bgOsc) bgOsc.stop();
-            playBGM();
-            gameLoop();
+    for (let i = coins.length - 1; i >= 0; i--) {
+        let c = coins[i];
+        c.x -= speed;
+        c.r += 0.2;
+
+        if (c.x + c.s < 0) coins.splice(i,1);
+
+        if (
+            player.x < c.x + c.s &&
+            player.x + player.w > c.x &&
+            player.y < c.y + c.s &&
+            player.y + player.h > c.y
+        ) {
+            score += 10;
+            coins.splice(i,1);
         }
+    }
+}
 
-        function restartGame() {
-            gameOver.style.display = 'none';
-            startGame();
-        }
+function updateLevel() {
+    level = Math.floor(score / 40) + 1;
+    speed = 1.2 + level * 0.25;
+}
 
-        function updatePlayer() {
-            player.vy += player.gravity;
-            player.y += player.vy;
-            if (player.y >= playerGroundY) {
-                player.y = playerGroundY; player.vy = 0; player.grounded = true;
-            }
-        }
+function draw() {
+    ctx.clearRect(0,0,W,H);
 
-        function updateHurdles() {
-            // REDUCED SPAWN RATE → much easier (was 0.03, now 0.008–0.012)
-            if (Math.random() < 0.009 + level * 0.003) {
-                hurdles.push({ x: gameWidth + 50, y: playerGroundY, width: 55, height: 65 });
-            }
-            for (let i = hurdles.length - 1; i >= 0; i--) {
-                hurdles[i].x -= gameSpeed;
-                if (hurdles[i].x + hurdles[i].width < 0) {
-                    hurdles.splice(i, 1);
-                    score += 5;
-                    if (score % 25 === 0) playCollect();
-                }
-            }
-        }
+    // Sky
+    ctx.fillStyle="#87CEEB";
+    ctx.fillRect(0,0,W,groundY);
 
-        function updateCoins() {
-            if (Math.random() < 0.028) {  // generous coins
-                coins.push({ x: gameWidth + 50, y: 180 + Math.random() * 220, width: 45, height: 45, rot: 0 });
-            }
-            for (let i = coins.length - 1; i >= 0; i--) {
-                const c = coins[i];
-                c.x -= gameSpeed;
-                c.rot += 0.25;
-                if (c.x + c.width < 0) { coins.splice(i, 1); continue; }
-                if (player.x < c.x + c.width && player.x + player.width > c.x &&
-                    player.y < c.y + c.height && player.y + player.height > c.y) {
-                    score += 10;
-                    playCollect();
-                    coins.splice(i, 1);
-                }
-            }
-        }
+    // Ground
+    ctx.fillStyle="#2E8B57";
+    ctx.fillRect(0,groundY,W,H-groundY);
 
-        function updateLevel() {
-            const newLevel = Math.floor(score / 40) + 1;
-            if (newLevel > level) {
-                level = newLevel;
-                gameSpeed += 0.25;
-                playLevelUp();
-            }
-        }
+    // Player
+    ctx.drawImage(ballImg, player.x, player.y, player.w, player.h);
 
-        function checkCollision() {
-            for (let h of hurdles) {
-                if (player.x < h.x + h.width && player.x + player.width > h.x &&
-                    player.y < h.y + h.height && player.y + player.height > h.y) {
-                    return true;
-                }
-            }
-            return false;
-        }
+    // Coins
+    for (let c of coins) {
+        ctx.save();
+        ctx.translate(c.x + c.s/2, c.y + c.s/2);
+        ctx.rotate(c.r);
+        ctx.drawImage(coinImg, -c.s/2, -c.s/2, c.s, c.s);
+        ctx.restore();
+    }
 
-        function gameOverFunc() {
-            gameRunning = false;
-            playGameOver();
-            if (bgOsc) { bgOsc.stop(); bgOsc = null; }
-            finalScore.textContent = score;
-            finalLevel.textContent = level;
-            gameOver.style.display = 'flex';
-        }
+    document.getElementById("scoreText").textContent = "Score: " + score;
+    document.getElementById("levelText").textContent = "Level: " + level;
+}
 
-        function draw() {
-            ctx.clearRect(0, 0, gameWidth, gameHeight);
-
-            // Sky
-            const grad = ctx.createLinearGradient(0, 0, 0, groundY);
-            grad.addColorStop(0, '#87CEEB'); grad.addColorStop(1, '#B0E0E6');
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, gameWidth, groundY);
-
-            // Ground
-            ctx.fillStyle = '#228B22';
-            ctx.fillRect(0, groundY, gameWidth, gameHeight - groundY);
-            ctx.fillStyle = '#32CD32';
-            for (let x = 0; x < gameWidth; x += 35) ctx.fillRect(x, groundY + 10, 25, 30);
-
-            // Player
-            ctx.shadowColor = '#FF8C00';
-            ctx.shadowBlur = 15;
-            if (ballImg.complete) {
-                ctx.drawImage(ballImg, player.x, player.y, player.width, player.height);
-            } else {
-                ctx.fillStyle = '#FF4500';
-                ctx.beginPath();
-                ctx.arc(player.x + 30, player.y + 30, 30, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.strokeStyle = '#FFD700';
-                ctx.lineWidth = 6;
-                ctx.stroke();
-            }
-            ctx.shadowBlur = 0;
-
-            // Hurdles
-            for (let h of hurdles) {
-                if (hurdleImg.complete) {
-                    ctx.drawImage(hurdleImg, h.x, h.y - 25, h.width, h.height + 25);
-                } else {
-                    ctx.fillStyle = '#8B4513';
-                    ctx.fillRect(h.x, h.y, h.width, h.height);
-                    ctx.fillStyle = '#D2691E';
-                    ctx.fillRect(h.x + 10, h.y + 10, h.width - 20, h.height - 20);
-                }
-            }
-
-            // Coins
-            ctx.shadowColor = '#FFD700';
-            ctx.shadowBlur = 20;
-            for (let c of coins) {
-                ctx.save();
-                ctx.translate(c.x + c.width/2, c.y + c.height/2);
-                ctx.rotate(c.rot);
-                if (coinImg.complete) {
-                    ctx.drawImage(coinImg, -c.width/2, -c.height/2, c.width, c.height);
-                } else {
-                    ctx.fillStyle = '#FFD700';
-                    ctx.beginPath();
-                    ctx.arc(0, 0, c.width/2, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.fillStyle = '#FFA500';
-                    ctx.beginPath();
-                    ctx.arc(0, 0, c.width/3, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                ctx.restore();
-            }
-            ctx.shadowBlur = 0;
-        }
-
-        function gameLoop() {
-            if (!gameRunning) return;
-            updatePlayer();
-            updateHurdles();
-            updateCoins();
-            updateLevel();
-            scoreText.textContent = `Score: ${score}`;
-            levelText.textContent = `Level: ${level}`;
-            if (checkCollision()) {
-                gameOverFunc();
-            } else {
-                draw();
-                requestAnimationFrame(gameLoop);
-            }
-        }
-
-        [ballImg, hurdleImg, coinImg].forEach(img => {
-            img.onload = () => { draw(); };
-            img.onerror = () => { draw(); };
-        });
-        draw();
-    </script>
+function loop() {
+    if (!gameRunning) return;
+    updatePlayer();
+    updateCoins();
+    updateLevel();
+    draw();
+    requestAnimationFrame(loop);
+}
+</script>
 </body>
 </html>
