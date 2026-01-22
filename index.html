@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>Ball Coin Runner - Mobile Kids Game</title>
+    <title>Ball Coin Runner - Easy Kids Game</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -97,13 +97,14 @@
         <div class="ui-text" id="scoreText">Score: 0</div>
         <div class="ui-text" id="levelText">Level: 1</div>
     </div>
-    <div id="instructions">👆 Tap or SPACE to Jump! 💰 Collect Coins 🏃 Avoid Hurdles!</div>
+    <div id="instructions">👆 Tap anywhere or SPACE to Jump! 💰 Collect Coins • Avoid Hurdles</div>
 
-    <div id="startOverlay" onclick="handleInput()">
-        <div id="startBtn">🚀 START! 🚀</div>
-        <div class="overlay-text">Super Easy for Kids! 🎮</div>
+    <div id="startOverlay">
+        <div id="startBtn">🚀 START GAME! 🚀</div>
+        <div class="overlay-text">Very Easy for Kids • Lots of Coins • Few Hurdles</div>
     </div>
-    <div id="gameOver" onclick="handleInput()">
+
+    <div id="gameOver">
         <h2 class="overlay-text" style="font-size: clamp(32px, 10vw, 64px);">Game Over! 😢</h2>
         <div class="overlay-text">Final Score: <span id="finalScore">0</span></div>
         <div class="overlay-text">Level: <span id="finalLevel">1</span></div>
@@ -111,10 +112,8 @@
     </div>
 
     <script>
-        // Mobile optimized responsive game
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const scaleFactor = window.devicePixelRatio || 1;
 
         let gameWidth = 800;
         let gameHeight = 600;
@@ -123,25 +122,23 @@
         function resizeCanvas() {
             const vw = window.innerWidth;
             const vh = window.innerHeight;
-            const maxW = 800;
-            const maxH = 600;
-            const targetW = Math.min(vw, maxW);
-            const targetH = Math.min(vh, maxH);
+            const targetW = Math.min(vw, gameWidth);
+            const targetH = Math.min(vh, gameHeight);
             scale = Math.min(targetW / gameWidth, targetH / gameHeight);
-            canvas.width = gameWidth * scale * scaleFactor;
-            canvas.height = gameHeight * scale * scaleFactor;
+            canvas.width = gameWidth * scale * devicePixelRatio;
+            canvas.height = gameHeight * scale * devicePixelRatio;
             canvas.style.width = (gameWidth * scale) + 'px';
             canvas.style.height = (gameHeight * scale) + 'px';
-            ctx.scale(scale * scaleFactor, scale * scaleFactor);
+            ctx.scale(scale * devicePixelRatio, scale * devicePixelRatio);
             ctx.imageSmoothingEnabled = false;
         }
         window.addEventListener('resize', resizeCanvas);
-        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 100));
+        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 300));
         resizeCanvas();
 
-        // Game vars
         const groundY = 520;
         const playerGroundY = groundY - 70;
+
         let gameRunning = false;
         let score = 0;
         let level = 1;
@@ -161,7 +158,6 @@
         let hurdles = [];
         let coins = [];
 
-        // UI elements
         const scoreText = document.getElementById('scoreText');
         const levelText = document.getElementById('levelText');
         const finalScore = document.getElementById('finalScore');
@@ -169,17 +165,16 @@
         const startOverlay = document.getElementById('startOverlay');
         const gameOver = document.getElementById('gameOver');
 
-        // Images
         const ballImg = new Image(); ballImg.src = 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgIAAapb_22j2KMQk-0k46WezOcR5RCgv2b6C2q4yEgCi-XYXs2Zrx4LjhBo9ci9g2NbVxNWFZRehIA8kBxyRuD7wA6GBui8U_w5MomtEzL6b2K4o9mmNt7tXie1qn5r4eSFlDYxREEGw3Z2pNqgCm_FHErOFAAQAZ-yCaATAb4nt517Or6lvvINQ-mSCtd/s1920/1000377997.png';
         const hurdleImg = new Image(); hurdleImg.src = 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiS_OoD7ll2j41n4L4SRxKBTrp_a5BBrRAn-SSjeq32kMQ17hCdEi1pM7Hmgv4rTuIviiuNt6k4aaw14HW9_pE79DAjXxMc7-_UXlPojDdve9zYdHlxFoiCxp3_WdgN55cbb6Fdhn4fXcxGrKKPX98zwmkYT1oXNY_L1HJM0XjJ8VrS66ynBESIyPwdcxdZ/s1536/1000376632.png';
         const coinImg = new Image(); coinImg.src = 'https://e7.pngegg.com/pngimages/1012/478/png-clipart-pixel-art-drawing-graphics-2d-coin-sprite-text-photography.png';
 
-        // Audio (mobile friendly - resumes on touch)
         let audioCtx;
         function initAudio() {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             if (audioCtx.state === 'suspended') audioCtx.resume();
         }
+
         function playSound(freq, dur, type = 'sine') {
             initAudio();
             const osc = audioCtx.createOscillator();
@@ -188,11 +183,12 @@
             osc.frequency.value = freq; osc.type = type;
             gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
-            osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + dur);
+            osc.start(); osc.stop(audioCtx.currentTime + dur);
         }
-        const playJump = () => playSound(520, 0.3, 'sine');
-        const playCollect = () => playSound(760, 0.2, 'sine');
-        const playLevelUp = () => { playSound(620, 0.25); setTimeout(() => playSound(830, 0.25), 120); };
+
+        const playJump     = () => playSound(520, 0.3, 'sine');
+        const playCollect  = () => playSound(760, 0.2, 'sine');
+        const playLevelUp  = () => { playSound(620, 0.25); setTimeout(() => playSound(830, 0.25), 120); };
         const playGameOver = () => playSound(180, 0.8, 'sawtooth');
 
         let bgOsc = null;
@@ -206,7 +202,6 @@
             bgOsc.start();
         }
 
-        // Input - unified for mobile/desktop
         function handleInput() {
             if (!gameRunning) {
                 if (startOverlay.style.display !== 'none') startGame();
@@ -218,11 +213,12 @@
             }
         }
 
-        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(); }, { passive: false });
+        canvas.addEventListener('touchstart', e => { e.preventDefault(); handleInput(); }, { passive: false });
         canvas.addEventListener('click', handleInput);
-        document.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); handleInput(); } });
+        document.addEventListener('keydown', e => {
+            if (e.code === 'Space') { e.preventDefault(); handleInput(); }
+        });
 
-        // Game logic
         function startGame() {
             gameRunning = true;
             score = 0; level = 1; gameSpeed = 1.2;
@@ -251,7 +247,8 @@
         }
 
         function updateHurdles() {
-            if (Math.random() < 0.03) {
+            // REDUCED SPAWN RATE → much easier (was 0.03, now 0.008–0.012)
+            if (Math.random() < 0.009 + level * 0.003) {
                 hurdles.push({ x: gameWidth + 50, y: playerGroundY, width: 55, height: 65 });
             }
             for (let i = hurdles.length - 1; i >= 0; i--) {
@@ -265,18 +262,14 @@
         }
 
         function updateCoins() {
-            if (Math.random() < 0.025) {
-                coins.push({ x: gameWidth + 50, y: 200 + Math.random() * 200, width: 45, height: 45, rot: 0 });
+            if (Math.random() < 0.028) {  // generous coins
+                coins.push({ x: gameWidth + 50, y: 180 + Math.random() * 220, width: 45, height: 45, rot: 0 });
             }
             for (let i = coins.length - 1; i >= 0; i--) {
                 const c = coins[i];
                 c.x -= gameSpeed;
                 c.rot += 0.25;
-                if (c.x + c.width < 0) {
-                    coins.splice(i, 1);
-                    continue;
-                }
-                // Collect
+                if (c.x + c.width < 0) { coins.splice(i, 1); continue; }
                 if (player.x < c.x + c.width && player.x + player.width > c.x &&
                     player.y < c.y + c.height && player.y + player.height > c.y) {
                     score += 10;
@@ -331,7 +324,7 @@
 
             // Player
             ctx.shadowColor = '#FF8C00';
-            ctx.shadowBlur = 15 * scale;
+            ctx.shadowBlur = 15;
             if (ballImg.complete) {
                 ctx.drawImage(ballImg, player.x, player.y, player.width, player.height);
             } else {
@@ -357,9 +350,9 @@
                 }
             }
 
-            // Coins spinning
+            // Coins
             ctx.shadowColor = '#FFD700';
-            ctx.shadowBlur = 20 * scale;
+            ctx.shadowBlur = 20;
             for (let c of coins) {
                 ctx.save();
                 ctx.translate(c.x + c.width/2, c.y + c.height/2);
@@ -375,11 +368,6 @@
                     ctx.beginPath();
                     ctx.arc(0, 0, c.width/3, 0, Math.PI * 2);
                     ctx.fill();
-                    ctx.strokeStyle = '#FFF';
-                    ctx.lineWidth = 3;
-                    ctx.beginPath();
-                    ctx.arc(-6, -10, 5, 0, Math.PI * 2);
-                    ctx.stroke();
                 }
                 ctx.restore();
             }
@@ -402,11 +390,9 @@
             }
         }
 
-        // Preload & init
-        let loaded = 0;
         [ballImg, hurdleImg, coinImg].forEach(img => {
-            img.onload = () => { loaded++; if (loaded === 3) draw(); };
-            img.onerror = () => { loaded++; draw(); };
+            img.onload = () => { draw(); };
+            img.onerror = () => { draw(); };
         });
         draw();
     </script>
