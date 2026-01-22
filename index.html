@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ball Coin Runner</title>
+    <title>Ball Coin Runner - Kids Easy Game</title>
     <style>
         body {
             margin: 0;
@@ -15,16 +15,48 @@
             min-height: 100vh;
             background-color: #f0f0f0;
             font-family: Arial, sans-serif;
+            touch-action: manipulation;
         }
         canvas {
             border: 3px solid #333;
             background-color: #87CEEB;
             box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            touch-action: none;
+        }
+        #startOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 150, 255, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            cursor: pointer;
+        }
+        #startBtn {
+            padding: 20px 40px;
+            font-size: 32px;
+            background: #FFD700;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            color: #333;
+            font-weight: bold;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            touch-action: manipulation;
+        }
+        #startBtn:active {
+            transform: scale(0.95);
         }
         #instructions {
             margin-top: 10px;
             text-align: center;
             color: #555;
+            font-size: 18px;
         }
         #gameOver {
             position: absolute;
@@ -38,6 +70,7 @@
             display: none;
             border-radius: 15px;
             box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            z-index: 20;
         }
         #gameOver h2 {
             margin: 0 0 20px;
@@ -53,33 +86,39 @@
             color: #333;
             font-weight: bold;
         }
-        button:hover {
+        button:hover, button:active {
             background: #FFA500;
+            transform: scale(0.98);
         }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="800" height="500"></canvas>
-    <div id="instructions">Click or Press SPACE to Jump & Start! Collect Coins & Avoid Hurdles 🏃‍♂️💰</div>
+    <canvas id="gameCanvas" width="800" height="500" tabindex="0"></canvas>
+    <div id="startOverlay" onclick="startGame()">
+        <button id="startBtn">🚀 START GAME! 🚀</button>
+        <p style="color:white; font-size:24px; margin:10px;">Tap or Click to Play!</p>
+    </div>
+    <div id="instructions">Press SPACE to Jump • Collect Coins 💰 • Avoid Hurdles!</div>
     <div id="gameOver">
         <h2>Game Over! 😢</h2>
         <p>Final Score: <span id="finalScore">0</span></p>
         <p>Level Reached: <span id="finalLevel">1</span></p>
-        <button onclick="restartGame()">Play Again!</button>
+        <button onclick="restartGame()">Play Again! 🎮</button>
     </div>
 
     <script>
         // Game variables
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const startOverlay = document.getElementById('startOverlay');
         const gameOverDiv = document.getElementById('gameOver');
         const finalScoreSpan = document.getElementById('finalScore');
         const finalLevelSpan = document.getElementById('finalLevel');
 
         const groundY = 430;
-        const playerGroundY = groundY - 60;
+        const playerGroundY = groundY - 65;
 
-        // Images (preloaded)
+        // Images
         const ballImg = new Image();
         ballImg.src = 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgIAAapb_22j2KMQk-0k46WezOcR5RCgv2b6C2q4yEgCi-XYXs2Zrx4LjhBo9ci9g2NbVxNWFZRehIA8kBxyRuD7wA6GBui8U_w5MomtEzL6b2K4o9mmNt7tXie1qn5r4eSFlDYxREEGw3Z2pNqgCm_FHErOFAAQAZ-yCaATAb4nt517Or6lvvINQ-mSCtd/s1920/1000377997.png';
 
@@ -92,100 +131,84 @@
         let gameRunning = false;
         let score = 0;
         let level = 1;
-        let gameSpeed = 1.5; // Slower for kids
-        let lastMilestoneCheck = 0;
+        let gameSpeed = 1.0; // Super slow start for kids
 
-        // Player (ball)
+        // Player
         const player = {
-            x: 100,
+            x: 120,
             y: playerGroundY,
-            width: 60,
-            height: 60,
+            width: 55,
+            height: 55,
             vy: 0,
-            gravity: 0.6, // Softer gravity
-            jumpPower: -18, // Higher jump
+            gravity: 0.5, // Very soft
+            jumpPower: -20, // High jump
             grounded: true
         };
 
-        // Game objects
         let hurdles = [];
         let coins = [];
 
-        // Audio Context
+        // Audio
         let audioCtx;
         function initAudio() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
-
-        function playSound(frequency, duration, type = 'sine') {
+        function playSound(freq, dur, type = 'sine') {
             initAudio();
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            oscillator.frequency.value = frequency;
-            oscillator.type = type;
-            gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-            oscillator.start(audioCtx.currentTime);
-            oscillator.stop(audioCtx.currentTime + duration);
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = freq;
+            osc.type = type;
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
+            osc.start(audioCtx.currentTime);
+            osc.stop(audioCtx.currentTime + dur);
         }
+        const playJumpSound = () => playSound(500, 0.25, 'sine');
+        const playCollectSound = () => playSound(700, 0.15, 'sine');
+        const playScoreSound = () => playSound(900, 0.1, 'triangle');
+        const playLevelUpSound = () => { playSound(600, 0.2); setTimeout(() => playSound(800, 0.2), 100); };
+        const playGameOverSound = () => playSound(180, 0.7, 'sawtooth');
 
-        // Sounds
-        function playJumpSound() { playSound(440, 0.25, 'sine'); }
-        function playCollectSound() { playSound(660, 0.2, 'sine'); }
-        function playScoreSound() { playSound(800, 0.15, 'triangle'); }
-        function playLevelUpSound() { 
-            playSound(523, 0.3, 'sine'); 
-            setTimeout(() => playSound(659, 0.3, 'sine'), 150);
-        }
-        function playGameOverSound() { playSound(200, 0.6, 'sawtooth'); }
-
-        // Background hum
         let backgroundOscillator = null;
         function playBackgroundHum() {
             initAudio();
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            oscillator.frequency.value = 110;
-            oscillator.type = 'sine';
-            gainNode.gain.setValueAtTime(0.04, audioCtx.currentTime);
-            oscillator.start();
-            return oscillator;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = 100;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
+            osc.start();
+            return osc;
         }
 
         // Controls
-        document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') {
-                e.preventDefault();
-                if (player.grounded && gameRunning) {
-                    player.vy = player.jumpPower;
-                    player.grounded = false;
-                    playJumpSound();
-                }
-            }
-        });
-
-        canvas.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (player.grounded && gameRunning) {
+        function handleStartOrJump() {
+            if (!gameRunning) {
+                startGame();
+            } else if (player.grounded) {
                 player.vy = player.jumpPower;
                 player.grounded = false;
                 playJumpSound();
-            } else if (!gameRunning) {
-                startGame();
+            }
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                handleStartOrJump();
             }
         });
+
+        canvas.addEventListener('click', handleStartOrJump);
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            canvas.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+            handleStartOrJump();
         });
 
         // Game functions
@@ -193,17 +216,16 @@
             gameRunning = true;
             score = 0;
             level = 1;
-            gameSpeed = 1.5;
+            gameSpeed = 1.0;
             player.y = playerGroundY;
             player.vy = 0;
             player.grounded = true;
             hurdles = [];
             coins = [];
+            startOverlay.style.display = 'none';
             gameOverDiv.style.display = 'none';
             document.getElementById('instructions').style.display = 'none';
-            if (backgroundOscillator) {
-                backgroundOscillator.stop();
-            }
+            if (backgroundOscillator) backgroundOscillator.stop();
             backgroundOscillator = playBackgroundHum();
             gameLoop();
         }
@@ -223,56 +245,52 @@
         }
 
         function updateHurdles() {
-            // Spawn hurdles (low rate for easy)
-            if (Math.random() < 0.01) {
+            // Spawn more frequently
+            if (Math.random() < 0.025) {
                 hurdles.push({
-                    x: canvas.width,
+                    x: canvas.width + 20,
                     y: playerGroundY,
                     width: 50,
-                    height: 70 // Shorter for easier jumps
+                    height: 60 // Even shorter
                 });
             }
-            // Update
+            // Update - FIXED: No early return!
             for (let i = hurdles.length - 1; i >= 0; i--) {
                 hurdles[i].x -= gameSpeed;
                 if (hurdles[i].x + hurdles[i].width < 0) {
                     hurdles.splice(i, 1);
                     score += 5;
-                    if (score % 20 === 0) {
-                        playScoreSound();
-                    }
-                    return;
+                    if (score % 20 === 0) playScoreSound();
+                    continue; // FIXED: Continue to process others
                 }
             }
         }
 
         function updateCoins() {
-            // Spawn coins
-            if (Math.random() < 0.008) {
+            if (Math.random() < 0.02) {
                 coins.push({
-                    x: canvas.width,
-                    y: Math.random() * (playerGroundY - 200) + 150, // Floating height
+                    x: canvas.width + 20,
+                    y: Math.random() * 180 + 100, // Varied heights
                     width: 40,
-                    height: 40
+                    height: 40,
+                    rot: 0 // For spin
                 });
             }
-            // Update
             for (let i = coins.length - 1; i >= 0; i--) {
                 coins[i].x -= gameSpeed;
+                coins[i].rot += 0.2;
                 if (coins[i].x + coins[i].width < 0) {
                     coins.splice(i, 1);
                     continue;
                 }
-                // Collect collision
+                // Collect
                 if (player.x < coins[i].x + coins[i].width &&
                     player.x + player.width > coins[i].x &&
                     player.y < coins[i].y + coins[i].height &&
                     player.y + player.height > coins[i].y) {
                     score += 10;
                     playCollectSound();
-                    if (score % 20 === 0) {
-                        playScoreSound();
-                    }
+                    if (score % 20 === 0) playScoreSound();
                     coins.splice(i, 1);
                     continue;
                 }
@@ -280,15 +298,15 @@
         }
 
         function updateLevel() {
-            const newLevel = Math.floor(score / 50) + 1;
+            const newLevel = Math.floor(score / 30) + 1;
             if (newLevel > level) {
                 level = newLevel;
-                gameSpeed += 0.3;
+                gameSpeed += 0.2;
                 playLevelUpSound();
             }
         }
 
-        function checkHurdleCollision() {
+        function checkCollision() {
             for (let hurdle of hurdles) {
                 if (player.x < hurdle.x + hurdle.width &&
                     player.x + player.width > hurdle.x &&
@@ -313,90 +331,102 @@
         }
 
         function draw() {
-            // Clear & Sky gradient
-            const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            skyGradient.addColorStop(0, '#87CEEB');
-            skyGradient.addColorStop(0.6, '#B0E0E6');
-            skyGradient.addColorStop(1, '#E0F6FF');
-            ctx.fillStyle = skyGradient;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Sky gradient
+            const grad = ctx.createLinearGradient(0, 0, 0, groundY);
+            grad.addColorStop(0, '#87CEEB');
+            grad.addColorStop(0.5, '#B0E0E6');
+            grad.addColorStop(1, '#E0FFFF');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, groundY);
 
             // Ground
             ctx.fillStyle = '#228B22';
             ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+            // Ground texture
+            ctx.fillStyle = '#32CD32';
+            for (let x = 0; x < canvas.width; x += 30) {
+                ctx.fillRect(x, groundY + 5, 20, 25);
+            }
 
             // Player
+            ctx.save();
             if (ballImg.complete) {
                 ctx.drawImage(ballImg, player.x, player.y, player.width, player.height);
             } else {
+                ctx.shadowColor = '#FF8C00';
+                ctx.shadowBlur = 10;
                 ctx.fillStyle = '#FF4500';
                 ctx.beginPath();
-                ctx.arc(player.x + 30, player.y + 30, 30, 0, Math.PI * 2);
+                ctx.arc(player.x + player.width/2, player.y + player.height/2, player.width/2, 0, Math.PI*2);
                 ctx.fill();
+                ctx.shadowBlur = 0;
                 ctx.strokeStyle = '#FFD700';
-                ctx.lineWidth = 4;
+                ctx.lineWidth = 5;
                 ctx.stroke();
             }
+            ctx.restore();
 
             // Hurdles
-            for (let hurdle of hurdles) {
+            for (let h of hurdles) {
                 if (hurdleImg.complete) {
-                    ctx.drawImage(hurdleImg, hurdle.x, hurdle.y, hurdle.width, hurdle.height);
+                    ctx.drawImage(hurdleImg, h.x, h.y - 20, h.width, h.height + 20); // Slight adjust
                 } else {
                     ctx.fillStyle = '#8B4513';
-                    ctx.fillRect(hurdle.x, hurdle.y, hurdle.width, hurdle.height);
+                    ctx.fillRect(h.x, h.y, h.width, h.height);
                     ctx.fillStyle = '#A0522D';
-                    ctx.fillRect(hurdle.x + 5, hurdle.y + 5, hurdle.width - 10, hurdle.height - 10);
+                    ctx.fillRect(h.x + 8, h.y + 8, h.width - 16, h.height - 16);
                 }
             }
 
-            // Coins
-            for (let coin of coins) {
+            // Coins with spin
+            for (let c of coins) {
+                ctx.save();
+                ctx.translate(c.x + c.width/2, c.y + c.height/2);
+                ctx.rotate(c.rot);
                 if (coinImg.complete) {
-                    ctx.drawImage(coinImg, coin.x, coin.y, coin.width, coin.height);
+                    ctx.drawImage(coinImg, -c.width/2, -c.height/2, c.width, c.height);
                 } else {
-                    // Fallback drawn coin
-                    ctx.save();
-                    ctx.translate(coin.x + 20, coin.y + 20);
+                    ctx.shadowColor = '#FFD700';
+                    ctx.shadowBlur = 15;
                     ctx.fillStyle = '#FFD700';
                     ctx.beginPath();
-                    ctx.arc(0, 0, 18, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.shadowColor = '#FFEA00';
-                    ctx.shadowBlur = 10;
-                    ctx.fillStyle = '#FFA500';
-                    ctx.beginPath();
-                    ctx.arc(0, 0, 12, 0, Math.PI * 2);
+                    ctx.arc(0, 0, c.width/2, 0, Math.PI*2);
                     ctx.fill();
                     ctx.shadowBlur = 0;
-                    ctx.strokeStyle = '#FFEA00';
-                    ctx.lineWidth = 3;
+                    ctx.fillStyle = '#FFA500';
                     ctx.beginPath();
-                    ctx.arc(0, -8, 6, 0, Math.PI * 2);
-                    ctx.stroke(); // Shine
-                    ctx.restore();
+                    ctx.arc(0, 0, c.width/3, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#FFF';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(-5, -8, 4, 0, Math.PI*2);
+                    ctx.stroke();
                 }
+                ctx.restore();
             }
 
             // UI
-            ctx.shadowColor = 'rgba(0,0,0,0.5)';
-            ctx.shadowBlur = 4;
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 40px Arial';
-            ctx.fillText(`Score: ${score}`, 30, 55);
-            ctx.fillText(`Level: ${level}`, 30, 105);
+            ctx.shadowColor = 'rgba(0,0,0,0.7)';
+            ctx.shadowBlur = 8;
+            ctx.fillStyle = '#FFF';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Score: ${score}`, 20, 60);
+            ctx.fillText(`Level: ${level}`, 20, 120);
             ctx.shadowBlur = 0;
+            ctx.textAlign = 'left';
         }
 
         function gameLoop() {
             if (!gameRunning) return;
-
             updatePlayer();
             updateHurdles();
             updateCoins();
             updateLevel();
-
-            if (checkHurdleCollision()) {
+            if (checkCollision()) {
                 gameOver();
             } else {
                 draw();
@@ -404,19 +434,13 @@
             }
         }
 
-        // Preload images
-        let imagesLoaded = 0;
-        const totalImages = 3;
-        function imageLoaded() {
-            imagesLoaded++;
-        }
+        // Preload & initial draw
         [ballImg, hurdleImg, coinImg].forEach(img => {
-            img.onload = imageLoaded;
-            img.onerror = () => console.error(`Failed to load image: ${img.src}`);
+            img.onload = () => draw();
+            img.onerror = (e) => { console.error('Image load failed:', img.src); draw(); };
         });
-
-        // Initial static draw
-        draw();
+        draw(); // Initial
+        canvas.focus();
     </script>
 </body>
 </html>
