@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ball Runner Game</title>
+    <title>Ball Coin Runner</title>
     <style>
         body {
             margin: 0;
             padding: 0;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
@@ -16,34 +17,55 @@
             font-family: Arial, sans-serif;
         }
         canvas {
-            border: 2px solid #333;
-            background-color: #87CEEB; /* Sky blue background */
+            border: 3px solid #333;
+            background-color: #87CEEB;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        #instructions {
+            margin-top: 10px;
+            text-align: center;
+            color: #555;
         }
         #gameOver {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.9);
             color: white;
-            padding: 20px;
+            padding: 30px;
             text-align: center;
             display: none;
-            border-radius: 10px;
+            border-radius: 15px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+        }
+        #gameOver h2 {
+            margin: 0 0 20px;
+            font-size: 2em;
         }
         button {
-            padding: 10px 20px;
-            font-size: 16px;
+            padding: 15px 30px;
+            font-size: 18px;
+            background: #FFD700;
+            border: none;
+            border-radius: 10px;
             cursor: pointer;
+            color: #333;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #FFA500;
         }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div id="instructions">Click or Press SPACE to Jump & Start! Collect Coins & Avoid Hurdles 🏃‍♂️💰</div>
     <div id="gameOver">
-        <h2>Game Over!</h2>
+        <h2>Game Over! 😢</h2>
         <p>Final Score: <span id="finalScore">0</span></p>
-        <button onclick="restartGame()">Restart</button>
+        <p>Level Reached: <span id="finalLevel">1</span></p>
+        <button onclick="restartGame()">Play Again!</button>
     </div>
 
     <script>
@@ -52,6 +74,10 @@
         const ctx = canvas.getContext('2d');
         const gameOverDiv = document.getElementById('gameOver');
         const finalScoreSpan = document.getElementById('finalScore');
+        const finalLevelSpan = document.getElementById('finalLevel');
+
+        const groundY = 430;
+        const playerGroundY = groundY - 60;
 
         // Images (preloaded)
         const ballImg = new Image();
@@ -60,26 +86,32 @@
         const hurdleImg = new Image();
         hurdleImg.src = 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiS_OoD7ll2j41n4L4SRxKBTrp_a5BBrRAn-SSjeq32kMQ17hCdEi1pM7Hmgv4rTuIviiuNt6k4aaw14HW9_pE79DAjXxMc7-_UXlPojDdve9zYdHlxFoiCxp3_WdgN55cbb6Fdhn4fXcxGrKKPX98zwmkYT1oXNY_L1HJM0XjJ8VrS66ynBESIyPwdcxdZ/s1536/1000376632.png';
 
+        const coinImg = new Image();
+        coinImg.src = 'https://e7.pngegg.com/pngimages/1012/478/png-clipart-pixel-art-drawing-graphics-2d-coin-sprite-text-photography.png';
+
         let gameRunning = false;
         let score = 0;
-        let gameSpeed = 2; // Initial speed
+        let level = 1;
+        let gameSpeed = 1.5; // Slower for kids
+        let lastMilestoneCheck = 0;
 
         // Player (ball)
         const player = {
             x: 100,
-            y: 300, // Ground level
-            width: 50,
-            height: 50,
+            y: playerGroundY,
+            width: 60,
+            height: 60,
             vy: 0,
-            gravity: 0.8,
-            jumpPower: -15,
+            gravity: 0.6, // Softer gravity
+            jumpPower: -18, // Higher jump
             grounded: true
         };
 
-        // Obstacles (hurdles)
-        let obstacles = [];
+        // Game objects
+        let hurdles = [];
+        let coins = [];
 
-        // Audio Context for sounds
+        // Audio Context
         let audioCtx;
         function initAudio() {
             if (!audioCtx) {
@@ -104,47 +136,45 @@
             oscillator.stop(audioCtx.currentTime + duration);
         }
 
-        // Jump sound (boing)
-        function playJumpSound() {
-            playSound(440, 0.2, 'sine'); // Higher pitch for jump
+        // Sounds
+        function playJumpSound() { playSound(440, 0.25, 'sine'); }
+        function playCollectSound() { playSound(660, 0.2, 'sine'); }
+        function playScoreSound() { playSound(800, 0.15, 'triangle'); }
+        function playLevelUpSound() { 
+            playSound(523, 0.3, 'sine'); 
+            setTimeout(() => playSound(659, 0.3, 'sine'), 150);
         }
+        function playGameOverSound() { playSound(200, 0.6, 'sawtooth'); }
 
-        // Game over sound (buzz)
-        function playGameOverSound() {
-            playSound(200, 0.5, 'sawtooth'); // Low buzz
-        }
-
-        // Score milestone sound (ding)
-        function playScoreSound() {
-            playSound(800, 0.1, 'triangle'); // Celebratory ding
-        }
-
-        // Background hum (subtle, starts on game start)
+        // Background hum
+        let backgroundOscillator = null;
         function playBackgroundHum() {
             initAudio();
             const oscillator = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
             oscillator.connect(gainNode);
             gainNode.connect(audioCtx.destination);
-            oscillator.frequency.value = 110; // Low hum
+            oscillator.frequency.value = 110;
             oscillator.type = 'sine';
-            gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime); // Very quiet
+            gainNode.gain.setValueAtTime(0.04, audioCtx.currentTime);
             oscillator.start();
-            // Note: This loops indefinitely until game over
             return oscillator;
         }
-        let backgroundOscillator = null;
 
-        // Event listeners
+        // Controls
         document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && player.grounded && gameRunning) {
-                player.vy = player.jumpPower;
-                player.grounded = false;
-                playJumpSound();
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (player.grounded && gameRunning) {
+                    player.vy = player.jumpPower;
+                    player.grounded = false;
+                    playJumpSound();
+                }
             }
         });
 
-        canvas.addEventListener('click', () => {
+        canvas.addEventListener('click', (e) => {
+            e.preventDefault();
             if (player.grounded && gameRunning) {
                 player.vy = player.jumpPower;
                 player.grounded = false;
@@ -153,17 +183,24 @@
                 startGame();
             }
         });
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            canvas.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+        });
 
         // Game functions
         function startGame() {
             gameRunning = true;
             score = 0;
-            gameSpeed = 2;
-            player.y = 300;
+            level = 1;
+            gameSpeed = 1.5;
+            player.y = playerGroundY;
             player.vy = 0;
             player.grounded = true;
-            obstacles = [];
+            hurdles = [];
+            coins = [];
             gameOverDiv.style.display = 'none';
+            document.getElementById('instructions').style.display = 'none';
             if (backgroundOscillator) {
                 backgroundOscillator.stop();
             }
@@ -178,46 +215,85 @@
         function updatePlayer() {
             player.vy += player.gravity;
             player.y += player.vy;
-
-            if (player.y >= 300) {
-                player.y = 300;
+            if (player.y >= playerGroundY) {
+                player.y = playerGroundY;
                 player.vy = 0;
                 player.grounded = true;
             }
         }
 
-        function updateObstacles() {
-            // Spawn new obstacle randomly
-            if (Math.random() < 0.02) { // Adjust spawn rate
-                obstacles.push({
+        function updateHurdles() {
+            // Spawn hurdles (low rate for easy)
+            if (Math.random() < 0.01) {
+                hurdles.push({
                     x: canvas.width,
-                    y: 300,
+                    y: playerGroundY,
                     width: 50,
-                    height: 80
+                    height: 70 // Shorter for easier jumps
                 });
             }
-
-            // Move obstacles
-            for (let i = obstacles.length - 1; i >= 0; i--) {
-                obstacles[i].x -= gameSpeed;
-                if (obstacles[i].x + obstacles[i].width < 0) {
-                    obstacles.splice(i, 1);
-                    score += 1; // Score per obstacle passed
-                    if (score % 10 === 0) {
+            // Update
+            for (let i = hurdles.length - 1; i >= 0; i--) {
+                hurdles[i].x -= gameSpeed;
+                if (hurdles[i].x + hurdles[i].width < 0) {
+                    hurdles.splice(i, 1);
+                    score += 5;
+                    if (score % 20 === 0) {
                         playScoreSound();
-                        gameSpeed += 0.5; // Speed up every 10 points
                     }
+                    return;
                 }
             }
         }
 
-        function checkCollision() {
-            for (let obs of obstacles) {
-                if (player.x < obs.x + obs.width &&
-                    player.x + player.width > obs.x &&
-                    player.y < obs.y + obs.height &&
-                    player.y + player.height > obs.y) {
-                    gameOver();
+        function updateCoins() {
+            // Spawn coins
+            if (Math.random() < 0.008) {
+                coins.push({
+                    x: canvas.width,
+                    y: Math.random() * (playerGroundY - 200) + 150, // Floating height
+                    width: 40,
+                    height: 40
+                });
+            }
+            // Update
+            for (let i = coins.length - 1; i >= 0; i--) {
+                coins[i].x -= gameSpeed;
+                if (coins[i].x + coins[i].width < 0) {
+                    coins.splice(i, 1);
+                    continue;
+                }
+                // Collect collision
+                if (player.x < coins[i].x + coins[i].width &&
+                    player.x + player.width > coins[i].x &&
+                    player.y < coins[i].y + coins[i].height &&
+                    player.y + player.height > coins[i].y) {
+                    score += 10;
+                    playCollectSound();
+                    if (score % 20 === 0) {
+                        playScoreSound();
+                    }
+                    coins.splice(i, 1);
+                    continue;
+                }
+            }
+        }
+
+        function updateLevel() {
+            const newLevel = Math.floor(score / 50) + 1;
+            if (newLevel > level) {
+                level = newLevel;
+                gameSpeed += 0.3;
+                playLevelUpSound();
+            }
+        }
+
+        function checkHurdleCollision() {
+            for (let hurdle of hurdles) {
+                if (player.x < hurdle.x + hurdle.width &&
+                    player.x + player.width > hurdle.x &&
+                    player.y < hurdle.y + hurdle.height &&
+                    player.y + player.height > hurdle.y) {
                     return true;
                 }
             }
@@ -232,70 +308,114 @@
                 backgroundOscillator = null;
             }
             finalScoreSpan.textContent = score;
+            finalLevelSpan.textContent = level;
             gameOverDiv.style.display = 'block';
         }
 
         function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Clear & Sky gradient
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            skyGradient.addColorStop(0, '#87CEEB');
+            skyGradient.addColorStop(0.6, '#B0E0E6');
+            skyGradient.addColorStop(1, '#E0F6FF');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw ground
+            // Ground
             ctx.fillStyle = '#228B22';
-            ctx.fillRect(0, 340, canvas.width, 60);
+            ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
 
-            // Draw player (ball)
+            // Player
             if (ballImg.complete) {
                 ctx.drawImage(ballImg, player.x, player.y, player.width, player.height);
             } else {
-                ctx.fillStyle = 'red'; // Fallback circle
+                ctx.fillStyle = '#FF4500';
                 ctx.beginPath();
-                ctx.arc(player.x + 25, player.y + 25, 25, 0, Math.PI * 2);
+                ctx.arc(player.x + 30, player.y + 30, 30, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.strokeStyle = '#FFD700';
+                ctx.lineWidth = 4;
+                ctx.stroke();
             }
 
-            // Draw obstacles (hurdles)
-            for (let obs of obstacles) {
+            // Hurdles
+            for (let hurdle of hurdles) {
                 if (hurdleImg.complete) {
-                    ctx.drawImage(hurdleImg, obs.x, obs.y, obs.width, obs.height);
+                    ctx.drawImage(hurdleImg, hurdle.x, hurdle.y, hurdle.width, hurdle.height);
                 } else {
-                    ctx.fillStyle = 'brown'; // Fallback rectangle
-                    ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                    ctx.fillStyle = '#8B4513';
+                    ctx.fillRect(hurdle.x, hurdle.y, hurdle.width, hurdle.height);
+                    ctx.fillStyle = '#A0522D';
+                    ctx.fillRect(hurdle.x + 5, hurdle.y + 5, hurdle.width - 10, hurdle.height - 10);
                 }
             }
 
-            // Draw score
-            ctx.fillStyle = 'black';
-            ctx.font = '24px Arial';
-            ctx.fillText(`Score: ${score}`, 10, 30);
+            // Coins
+            for (let coin of coins) {
+                if (coinImg.complete) {
+                    ctx.drawImage(coinImg, coin.x, coin.y, coin.width, coin.height);
+                } else {
+                    // Fallback drawn coin
+                    ctx.save();
+                    ctx.translate(coin.x + 20, coin.y + 20);
+                    ctx.fillStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 18, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowColor = '#FFEA00';
+                    ctx.shadowBlur = 10;
+                    ctx.fillStyle = '#FFA500';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                    ctx.strokeStyle = '#FFEA00';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(0, -8, 6, 0, Math.PI * 2);
+                    ctx.stroke(); // Shine
+                    ctx.restore();
+                }
+            }
+
+            // UI
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 4;
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 40px Arial';
+            ctx.fillText(`Score: ${score}`, 30, 55);
+            ctx.fillText(`Level: ${level}`, 30, 105);
+            ctx.shadowBlur = 0;
         }
 
         function gameLoop() {
             if (!gameRunning) return;
 
             updatePlayer();
-            updateObstacles();
-            if (!checkCollision()) {
+            updateHurdles();
+            updateCoins();
+            updateLevel();
+
+            if (checkHurdleCollision()) {
+                gameOver();
+            } else {
                 draw();
                 requestAnimationFrame(gameLoop);
-            } else {
-                draw(); // Final draw before game over
             }
         }
 
-        // Preload images and start if needed
+        // Preload images
         let imagesLoaded = 0;
-        const totalImages = 2;
+        const totalImages = 3;
         function imageLoaded() {
             imagesLoaded++;
-            if (imagesLoaded === totalImages) {
-                // Images ready, but game starts on user input
-            }
         }
-        ballImg.onload = imageLoaded;
-        hurdleImg.onload = imageLoaded;
-        ballImg.onerror = () => console.error('Failed to load ball image');
-        hurdleImg.onerror = () => console.error('Failed to load hurdle image');
+        [ballImg, hurdleImg, coinImg].forEach(img => {
+            img.onload = imageLoaded;
+            img.onerror = () => console.error(`Failed to load image: ${img.src}`);
+        });
 
-        // Initial draw (static)
+        // Initial static draw
         draw();
     </script>
 </body>
